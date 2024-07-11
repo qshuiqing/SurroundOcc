@@ -1,22 +1,38 @@
 import torch
-import torch.nn as nn
 import torch.nn.functional as F
-import pdb
+
 
 def multiscale_supervision(gt_occ, ratio, gt_shape):
     '''
     change ground truth shape as (B, W, H, Z) for each level supervision
     '''
 
-    gt = torch.zeros([gt_shape[0], gt_shape[2], gt_shape[3], gt_shape[4]]).to(gt_occ.device).type(torch.float) # (b,x,y,z)
+    # 创建一个索引网格
+    idx_W = torch.arange(0, gt_occ.shape[1], ratio)
+    idx_H = torch.arange(0, gt_occ.shape[2], ratio)
+    idx_Z = torch.arange(0, gt_occ.shape[3], ratio)
+
+    # 使用索引网格进行下采样
+    gt_occ_downsampled = gt_occ[:, idx_W[:, None, None], idx_H[None, :, None], idx_Z[None, None, :]]
+
+    return gt_occ_downsampled
+
+
+def _multiscale_supervision(gt_occ, ratio, gt_shape):
+    '''
+    change ground truth shape as (B, W, H, Z) for each level supervision
+    '''
+
+    gt = torch.zeros([gt_shape[0], gt_shape[2], gt_shape[3], gt_shape[4]]).to(gt_occ.device).type(
+        torch.float)  # (b,x,y,z)
     for i in range(gt.shape[0]):
         coords = gt_occ[i][:, :3].type(torch.long) // ratio
-        gt[i, coords[:, 0], coords[:, 1], coords[:, 2]] =  gt_occ[i][:, 3]
-    
+        gt[i, coords[:, 0], coords[:, 1], coords[:, 2]] = gt_occ[i][:, 3]
+
     return gt
 
-def geo_scal_loss(pred, ssc_target, semantic=True):
 
+def geo_scal_loss(pred, ssc_target, semantic=True):
     # Get softmax probabilities
     if semantic:
         pred = F.softmax(pred, dim=1)
@@ -39,9 +55,9 @@ def geo_scal_loss(pred, ssc_target, semantic=True):
     recall = intersection / nonempty_target.sum()
     spec = ((1 - nonempty_target) * (empty_probs)).sum() / (1 - nonempty_target).sum()
     return (
-        F.binary_cross_entropy(precision, torch.ones_like(precision))
-        + F.binary_cross_entropy(recall, torch.ones_like(recall))
-        + F.binary_cross_entropy(spec, torch.ones_like(spec))
+            F.binary_cross_entropy(precision, torch.ones_like(precision))
+            + F.binary_cross_entropy(recall, torch.ones_like(recall))
+            + F.binary_cross_entropy(spec, torch.ones_like(spec))
     )
 
 
@@ -90,4 +106,3 @@ def sem_scal_loss(pred, ssc_target):
                 loss_class += loss_specificity
             loss += loss_class
     return loss / count
-
