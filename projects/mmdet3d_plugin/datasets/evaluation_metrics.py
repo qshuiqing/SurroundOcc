@@ -1,6 +1,6 @@
 import numpy as np
 import torch
-import chamfer
+# import chamfer
 
 def voxel_to_vertices(voxel, img_metas, thresh=0.5):
     x = torch.linspace(0, voxel.shape[0] - 1, voxel.shape[0])

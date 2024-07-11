@@ -187,11 +187,11 @@ class OccHead(nn.Module):
     @auto_fp16(apply_to=('mlvl_feats'))
     def forward(self, mlvl_feats, img_metas):
 
-        bs, num_cam, _, _, _ = mlvl_feats[0].shape
+        bs, num_cam, _, _, _ = mlvl_feats[0].shape  # b,6,*_
         dtype = mlvl_feats[0].dtype
 
         volume_embed = []
-        for i in range(self.fpn_level):
+        for i in range(self.fpn_level):  # 3
             volume_queries = self.volume_embedding[i].weight.to(dtype)
             
             volume_h = self.volume_h[i]
@@ -224,7 +224,7 @@ class OccHead(nn.Module):
         
         outputs = []
         result = volume_embed_reshape.pop()
-        for i in range(len(self.deblocks)):
+        for i in range(len(self.deblocks)):  # 7
             result = self.deblocks[i](result)
 
             if i in self.out_indices:
@@ -273,8 +273,8 @@ class OccHead(nn.Module):
 
                 loss_dict['loss_occ_{}'.format(i)] = loss_occ_i
     
-        else:
-            pred = preds_dicts['occ_preds']
+        else:  # True
+            pred = preds_dicts['occ_preds']  # (1,17,x,y,z) x 4
             
             criterion = nn.CrossEntropyLoss(
                 ignore_index=255, reduction="mean"

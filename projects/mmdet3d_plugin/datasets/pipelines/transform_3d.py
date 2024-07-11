@@ -1,9 +1,13 @@
-import numpy as np
-from numpy import random
+import os
+
 import mmcv
-from mmdet.datasets.builder import PIPELINES
-from mmcv.parallel import DataContainer as DC
+import numpy as np
+import torch
 from PIL import Image
+from mmcv.parallel import DataContainer as DC
+from mmdet.datasets.builder import PIPELINES
+from numpy import random
+
 
 @PIPELINES.register_module()
 class PadMultiViewImage(object):
@@ -33,7 +37,7 @@ class PadMultiViewImage(object):
         elif self.size_divisor is not None:
             padded_img = [mmcv.impad_to_multiple(
                 img, self.size_divisor, pad_val=self.pad_val) for img in results['img']]
-        
+
         results['ori_shape'] = [img.shape for img in results['img']]
         results['img'] = padded_img
         results['img_shape'] = [img.shape for img in padded_img]
@@ -74,7 +78,6 @@ class NormalizeMultiviewImage(object):
         self.mean = np.array(mean, dtype=np.float32)
         self.std = np.array(std, dtype=np.float32)
         self.to_rgb = to_rgb
-
 
     def __call__(self, results):
         """Call function to normalize images.
@@ -137,12 +140,12 @@ class PhotoMetricDistortionMultiViewImage:
         new_imgs = []
         for img in imgs:
             assert img.dtype == np.float32, \
-                'PhotoMetricDistortion needs the input image of dtype np.float32,'\
+                'PhotoMetricDistortion needs the input image of dtype np.float32,' \
                 ' please set "to_float32=True" in "LoadImageFromFile" pipeline'
             # random brightness
             if random.randint(2):
                 delta = random.uniform(-self.brightness_delta,
-                                    self.brightness_delta)
+                                       self.brightness_delta)
                 img += delta
 
             # mode == 0 --> do random contrast first
@@ -151,7 +154,7 @@ class PhotoMetricDistortionMultiViewImage:
             if mode == 1:
                 if random.randint(2):
                     alpha = random.uniform(self.contrast_lower,
-                                        self.contrast_upper)
+                                           self.contrast_upper)
                     img *= alpha
 
             # convert color from BGR to HSV
@@ -160,7 +163,7 @@ class PhotoMetricDistortionMultiViewImage:
             # random saturation
             if random.randint(2):
                 img[..., 1] *= random.uniform(self.saturation_lower,
-                                            self.saturation_upper)
+                                              self.saturation_upper)
 
             # random hue
             if random.randint(2):
@@ -175,7 +178,7 @@ class PhotoMetricDistortionMultiViewImage:
             if mode == 0:
                 if random.randint(2):
                     alpha = random.uniform(self.contrast_lower,
-                                        self.contrast_upper)
+                                           self.contrast_upper)
                     img *= alpha
 
             # randomly swap channels
@@ -194,7 +197,6 @@ class PhotoMetricDistortionMultiViewImage:
         repr_str += f'{(self.saturation_lower, self.saturation_upper)},\n'
         repr_str += f'hue_delta={self.hue_delta})'
         return repr_str
-
 
 
 @PIPELINES.register_module()
@@ -245,7 +247,7 @@ class CustomCollect3D(object):
     def __init__(self,
                  keys,
                  meta_keys=('filename', 'ori_shape', 'img_shape', 'lidar2img',
-                            'depth2img', 'cam2img', 'pad_shape',
+                            'depth2img', 'cam2img', 'pad_shape', 'ego2lidar',
                             'scale_factor', 'flip', 'pcd_horizontal_flip',
                             'pcd_vertical_flip', 'box_mode_3d', 'box_type_3d',
                             'img_norm_cfg', 'pcd_trans', 'sample_idx', 'prev_idx', 'next_idx',
@@ -266,10 +268,10 @@ class CustomCollect3D(object):
                 - keys in ``self.keys``
                 - ``img_metas``
         """
-       
+
         data = {}
         img_metas = {}
-      
+
         for key in self.meta_keys:
             if key in results:
                 img_metas[key] = results[key]
@@ -294,7 +296,7 @@ class RandomScaleImageMultiViewImage(object):
 
     def __init__(self, scales=[]):
         self.scales = scales
-        assert len(self.scales)==1
+        assert len(self.scales) == 1
 
     def __call__(self, results):
         """Call function to pad images, masks, semantic segmentation maps.
@@ -320,12 +322,12 @@ class RandomScaleImageMultiViewImage(object):
 
         return results
 
-
     def __repr__(self):
         repr_str = self.__class__.__name__
         repr_str += f'(size={self.scales}, '
         return repr_str
-    
+
+
 @PIPELINES.register_module()
 class Augmentation(object):
     """Load multi channel images from a list of separate channel files.
@@ -343,8 +345,7 @@ class Augmentation(object):
         self.is_train = is_train
         self.data_config = data_config
 
-
-    def get_rot(self,h):
+    def get_rot(self, h):
         return np.array([
             [np.cos(h), np.sin(h)],
             [-np.sin(h), np.cos(h)],
@@ -379,14 +380,14 @@ class Augmentation(object):
         if flip:
             img = img.transpose(method=Image.FLIP_LEFT_RIGHT)
         img = img.rotate(rotate)
-        
+
         return img
 
-    def sample_augmentation(self, H , W, flip=None, scale=None, decay_aug=False):
+    def sample_augmentation(self, H, W, flip=None, scale=None, decay_aug=False):
         fH, fW = self.data_config['input_size']
-        
+
         if self.is_train and (not decay_aug):
-            resize = float(fW)/float(W)
+            resize = float(fW) / float(W)
             resize += np.random.uniform(*self.data_config['resize'])
             resize_dims = (int(W * resize), int(H * resize))
             newW, newH = resize_dims
@@ -396,9 +397,9 @@ class Augmentation(object):
             crop = (crop_w, crop_h, crop_w + fW, crop_h + fH)
             flip = self.data_config['flip'] and np.random.choice([0, 1])
             rotate = np.random.uniform(*self.data_config['rot'])
-        
+
         else:
-            resize = float(fW)/float(W)
+            resize = float(fW) / float(W)
             resize += self.data_config.get('resize_test', 0.0)
             if scale is not None:
                 resize = scale
@@ -409,44 +410,42 @@ class Augmentation(object):
             crop = (crop_w, crop_h, crop_w + fW, crop_h + fH)
             flip = False if flip is None else flip
             rotate = 0
-        
+
         return resize, resize_dims, crop, flip, rotate
 
     def get_inputs(self, results, flip=None, scale=None):
         # print('decay img_aug = {}'.format(decay_aug))
-        
+
         new_imgs = []
         new_lidar2img = []
         # load the monocular image for semantic kitti
         for i, img in enumerate(results['img']):
             decay_aug = random.rand() <= self.data_config['decay_rate']
-            
+
             img = Image.fromarray(img)
             # perform image-view augmentation
             post_rot = np.eye(2)
             post_tran = np.zeros(2)
-            
-            img_augs = self.sample_augmentation(H=img.height, W=img.width, 
-                            flip=flip, scale=scale, decay_aug=decay_aug)
-            
+
+            img_augs = self.sample_augmentation(H=img.height, W=img.width,
+                                                flip=flip, scale=scale, decay_aug=decay_aug)
+
             resize, resize_dims, crop, flip, rotate = img_augs
             img, post_rot2, post_tran2 = \
-                self.img_transform(img, post_rot, post_tran, resize=resize, 
-                    resize_dims=resize_dims, crop=crop,flip=flip, rotate=rotate)
-    
+                self.img_transform(img, post_rot, post_tran, resize=resize,
+                                   resize_dims=resize_dims, crop=crop, flip=flip, rotate=rotate)
+
             # for convenience, make augmentation matrices 3x3
             post_rot = np.eye(4)
             post_rot[:2, :2] = post_rot2
             post_rot[:2, 2] = post_tran2
-    
 
-            
             # extrins
             img = np.array(img, dtype=np.float32)
             lidar2img = post_rot @ results['lidar2img'][i]
             new_imgs.append(img)
             new_lidar2img.append(lidar2img)
-            
+
         results['lidar2img'] = new_lidar2img
         results['img'] = new_imgs
 
@@ -454,6 +453,64 @@ class Augmentation(object):
 
     def __call__(self, results):
         results['img_inputs'] = self.get_inputs(results)
-        
+
         return results
-    
+
+
+@PIPELINES.register_module()
+class LoadOccGTFromFile(object):
+    """Load multi channel images from a list of separate channel files.
+
+    Expects results['img_filename'] to be a list of filenames.
+    note that we read image in BGR style to align with opencv.imread
+    Args:
+        to_float32 (bool): Whether to convert the img to float32.
+            Defaults to False.
+        color_type (str): Color type of the file. Defaults to 'unchanged'.
+    """
+
+    def __init__(
+            self,
+            data_root,
+    ):
+        self.data_root = data_root
+
+    def __call__(self, results):
+        # print(results.keys())
+        if 'occ_gt_path' in results:
+            occ_gt_path = results['occ_gt_path']
+            occ_gt_path = os.path.join(self.data_root, occ_gt_path)
+
+            occ_labels = np.load(occ_gt_path)
+            semantics = occ_labels['semantics']
+            mask_lidar = occ_labels['mask_lidar']
+            mask_camera = occ_labels['mask_camera']
+        else:
+            semantics = np.zeros((200, 200, 16), dtype=np.uint8)
+            mask_lidar = np.zeros((200, 200, 16), dtype=np.uint8)
+            mask_camera = np.zeros((200, 200, 16), dtype=np.uint8)
+
+        semantics = torch.from_numpy(semantics)
+        mask_lidar = torch.from_numpy(mask_lidar)
+        mask_camera = torch.from_numpy(mask_camera)
+
+        if results.get('flip_dx', False):  # semantics[::-1,...]
+            semantics = torch.flip(semantics, [0])
+            mask_lidar = torch.flip(mask_lidar, [0])
+            mask_camera = torch.flip(mask_camera, [0])
+
+        if results.get('flip_dy', False):  # semantics[:,::-1,...]
+            semantics = torch.flip(semantics, [1])
+            mask_lidar = torch.flip(mask_lidar, [1])
+            mask_camera = torch.flip(mask_camera, [1])
+
+        results['voxel_semantics'] = semantics
+        results['mask_lidar'] = mask_lidar
+        results['mask_camera'] = mask_camera
+
+        return results
+
+    def __repr__(self):
+        """str: Return a string that describes the module."""
+        return "{} (data_root={}')".format(
+            self.__class__.__name__, self.data_root)
